@@ -23,20 +23,19 @@ out_of_time:-
     asserta(moved(turn(left))),
     asserta(moved(turn(left))),
     assert(fl_have_gold),
-    retract(max_depth(50)),
+    retractall(max_depth),
     assert(max_depth(1)).
 out_of_time.
     
 actions([forward, turn(left), turn(right), shoot, grab, climb]).
 
-%agt_act(Percept, shoot):-
-%    member(stench, Percept),
-%    fl_loc(Loc),
-%    fl_dir(Dir),
-%    next_location(Dir, Loc, Loc1),
-%
-%    wumpus(Loc1),
-%    ops(shoot).
+agt_act(Percept, shoot):-
+    member(stench, Percept),
+    fl_loc(Loc),
+    fl_dir(Dir),
+    next_location(Dir, Loc, Loc1),
+    wumpus(Loc1),
+    update(Percept, shoot).
     
 agt_act(_, climb) :-
     fl_have_gold,
@@ -50,25 +49,19 @@ agt_act(Percept,grab):-
     asserta(moved(turn(left))),
     asserta(moved(turn(left))).
    
-agt_act(Percept,shoot):-
-    member(stench, Percept),
-    update(Percept, shoot).
+#agt_act(Percept,shoot):-
+#    member(stench, Percept),
+#    update(Percept, shoot).
    
 agt_act(_, Action) :-
     fl_have_gold,
-%writeln(starting),
-    %go_home(Action).
-    %go_home1(Action).
     go_home2(Action).
-    %update(Percept,Action).
+
     
 agt_act(Percept,Action) :-
     assert_percept(Percept),
     explore(Action),
     update(Percept,Action).
-    
-agt_act(_, climb):-
-    out_of_time.
 
 update(Percept,Action):-
 	member(Action,[forward,turn(right),turn(left)]),
@@ -273,7 +266,7 @@ ops(shoot):-
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% memory predicates
+% memory predicates, coutesy of Dr. Zelle
     
 assert_percept(P) :-
     %writeln(assertingVisited),
@@ -343,13 +336,19 @@ update_situation(Action):-
     ops(Action).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% basc_properties.pl
+% Author: Shuhei Yamamoto
+% Debugging: Shun Yamanaka
+% Date: 4/9/10
+% Description: implements the various relations
+% that characterze the basic properties of the
 % environment
 
 :- dynamic x_size/1.
 :- dynamic y_size/1.
 
-%%%%%%%%%%%%%%BLEH PUT THESE IN WHEN YOU RUN IN PROLOG MANUALLY%%%%%%%%%%%%%%%%%%%%%%%%
-go:-
+
+go:- % Use go when manually testing in pl
     assert(x_size(4)),
     assert(y_size(4)).
 
@@ -364,13 +363,6 @@ direction(east).
 direction(south).
 direction(west).
 
-action(forward).
-action(turn(left)).
-action(turn(right)).
-%action(grab).
-%action(climb).
-%action(shoot).
-
 
 home(xy(1,1)).
 
@@ -383,13 +375,7 @@ next_location(Dir, xy(X0,Y0), xy(X,Y)) :-
 dir_inc(east, 1, 0).
 dir_inc(west,-1, 0).
 dir_inc(north,0, 1).
-dir_inc(south,0,-1).    
-   
-%next_direction(LR, Dir0, Dir1) :-
-%	nth0(N, [north, east, south, west], Dir0), 
-%	member(LR/Exp, [left/(N-1), right/(N+1)]),!,
-%	Index is (Exp+4) mod 4,
-%	nth0(Index, [north, east, south, west], Dir1).
+dir_inc(south,0,-1).
 
 clockwise_next(north,east).
 clockwise_next(east,south).
@@ -398,12 +384,13 @@ clockwise_next(west,north).
 
 next_direction(left, Dir0, Dir) :-
 	clockwise_next(Dir,Dir0).
-	
+
 next_direction(right, Dir0, Dir) :-
 	clockwise_next(Dir0, Dir).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Direct Perceptions
+% By: Jacob Mroz, Josh Osbeck, Jacob Hinrichsen
 
 % breezy(?Location).
 % not_breezy(?Location).
@@ -430,12 +417,22 @@ visited(Loc):-
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Who wrote these?? Comments!!!
 % High-level inferences
 
 % Gets an adjacent square
 adj(Loc1, Loc2):-
     next_location(_, Loc1, Loc2).
- 
+
+anyAdj(Loc1, Loc2):-
+    next_location(east, Loc1, Loc2).
+anyAdj(Loc1, Loc2):-
+    next_location(west, Loc1, Loc2).
+anyAdj(Loc1, Loc2):-
+    next_location(north, Loc1, Loc2).
+anyAdj(Loc1, Loc2):-
+    next_location(south, Loc1, Loc2).
+    
 adjacentToAll([], _).
 adjacentToAll([H|T], Loc) :-
     adj(Loc, H),
@@ -454,11 +451,15 @@ not_pit(Loc) :-
     not_breezy(Loc1).
 
 % Square is safe for travel if it isn't a pit or wumpus    
-ok(xy(1,1)):-!.
+ok(xy(1,1)):-
+    !.
 ok(Loc) :-
-    fl_ok(Loc), !.
+    fl_ok(Loc), 
+    !.
 ok(Loc) :-
-    not_pit(Loc), wumpus_dead, !.
+    wumpus_dead,
+    not_pit(Loc),
+    !.
 ok(Loc) :-
     not_pit(Loc), not_wumpus(Loc).
 
@@ -469,16 +470,12 @@ wumpus_dead :-
 
 wumpus(Loc) :-
 	location(Loc),
-	setof(L, (adj(Loc, L), smelly(L)), SmellyAdj),
+	setof(L, (anyAdj(Loc, L), smelly(L)), SmellyAdj),
 	SmellyAdj \= [],
 	setof(L, (adjacentToAll(SmellyAdj, L), not(not_wumpus(L))), CouldBeWumpus),
 	CouldBeWumpus = [Loc].
 
-    
-% pit(Loc) :-
-%    adj(Loc, Loc1), breezy(Loc1),
-%    setof(L,(adj, (L,L1), not(not_pit(L1))), CouldBePit),
-%    CouldBePit = [Loc].
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SEARCHING %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Graph search (cycle checking).
 :- dynamic max_depth/1.
